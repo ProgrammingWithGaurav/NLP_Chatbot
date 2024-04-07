@@ -13,3 +13,7 @@ def get_str_from_food_dict(food_dict: dict):
     # convert the dictionary to a string
     # e.g. {'pizza': 1, 'burger': 2} -> 'pizza x1, burger x2'
     return ', '.join([f'{key} x{value}' for key, value in food_dict.items()])   
+
+def get_str_from_menu(menu: list):
+    text = ', '.join([f"{item['item_name']} - ${item['price']}" for item in menu])
+    return text

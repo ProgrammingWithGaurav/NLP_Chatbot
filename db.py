@@ -1,155 +1,123 @@
-# import sqlite
-import sqlite3
+from pymongo import MongoClient
+import os
+import dotenv
 
-# create a connection to the database
-conn = sqlite3.connect('./db/data.db')
+# Load environment variables
+dotenv.load_dotenv()
 
-# function to initialize the database
+# Create a client to connect to your MongoDB server
+client = MongoClient(os.getenv("MONGODB_URI"))
+
+# Access your database (it will be created if it doesn't exist)
+db = client['FoodDeliveryChatbot']
+
+# Access your collections (similar to tables in SQL databases)
+food_items = db['food_items']
+order_tracking = db['order_tracking']
+orders = db['orders']
+
+# Function to initialize the database
 def init_db():
-    # create a cursor object
-    cursor = conn.cursor()
+    # Check if the food_items collection is  empty
+    if food_items.count_documents({}) == 0:
+        # Insert data into food_items collection
+        food_items.insert_many([
+            {"item_name": "Pizza", "price": 10.00},
+            {"item_name": "Burger", "price": 5.00},
+            {"item_name": "Fries", "price": 3.00},
+            {"item_name": "Cola", "price": 2.00},
+            {"item_name": "Sandwich", "price": 4.00},
+            {"item_name": "Chicken", "price": 12.00},
+            {"item_name": "Cake", "price": 6.00}
+        ])
 
-    # Execute SQL command to create the food_orders table
-    # orders table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS orders (
-                        order_id INTEGER PRIMARY KEY,
-                        item_id INTEGER,
-                        quantity INTEGER,
-                        total_price REAL
-                        )''')
+if __name__ == '__main__':
+    init_db()
 
-    # food items table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS food_items (
-                        item_id INTEGER PRIMARY KEY,
-                        item_name TEXT,
-                        price REAL
-                        )''')
+    
 
 
-    # order tracking table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS order_tracking (
-                        order_id INTEGER PRIMARY KEY,
-                        status TEXT
-                    )''')
-
-    # Commit changes and close connection
-    conn.commit()    
-    cursor.close()
+# Function to get menu
+def get_menu():
+    try:
+        # Fetch all documents in the food_items collection
+        menu = food_items.find({}, {'_id': 0}) # _id is excluded from the result
+        # Convert the cursor to a list
+        return list(menu)
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 # function to get the order status
 def get_order_status(order_id):
-    cursor = conn.cursor()
     try:
-        # Execute the SQL command
-        cursor.execute(f'SELECT status FROM order_tracking WHERE order_id = {int(order_id)}')
-        status = cursor.fetchone()
-
-        # Always close the connection before returning
-        conn.close()
-
-        if status is not None:
-            return status[0]
-        else:
-            return None
-    except sqlite3.ProgrammingError as e:
+        # Fetch the order status from the order_tracking collection
+        status = order_tracking.find_one({"order_id": order_id}, {'_id': 0})
+        return status['status']
+    except Exception as e:
         print(f"An error occurred: {e}")
-        conn.close()
-
-# function to get next order i
+        
+# Function to get next order id
 def get_next_order_id():
-    cursor = conn.cursor()
     try:
-        # Execute the SQL command
-        cursor.execute('SELECT MAX(order_id) FROM orders')
-        order_id = cursor.fetchone()
-
-        cursor.close()
-
-        if order_id[0] is not None:
-            return order_id[0] + 1
+        # Fetch the document with the highest order_id
+        order = order_tracking.find_one(sort=[("order_id", -1)])
+        if order is not None:
+            return order["order_id"] + 1
         else:
             return 1
-    except sqlite3.ProgrammingError as e:
+    except Exception as e:
         print(f"An error occurred: {e}")
-        conn.close()
 
-# function to get the id of the food items
+# Function to get the id of the food items
 def get_food_item_id(food_item: str):
-    try: 
-        cursor = conn.cursor()
-        cursor.execute(f'SELECT item_id FROM food_items WHERE item_name = "{food_item}"')
-        item_id = cursor.fetchone()
-
-        cursor.close()
-
-        if item_id is not None:
-            return item_id[0]
+    try:
+        # Fetch the document with the given item_name
+        item = food_items.find_one({"item_name": food_item}, {"_id": 1}) # _id is included in the result
+        if item is not None:
+            return item["_id"]
         else:
             return None
+    except Exception as e:
+        print(f"An error occurred: {e}") 
 
-    except sqlite3.ProgrammingError as e:
-        print(f"An error occurred: {e}")
-        conn.close()
-
-def insert_food_item(food_item, quantity, order_id):
-    cursor = conn.cursor()
+# Function to insert order item
+def insert_order_item(food_item, quantity, order_id):
     try:
-        # Get the item_id from the food_items table
+        # Get the item_id from the food_items collection
         item_id = get_food_item_id(food_item)
-        if item_id is None:
-            return "Item not found"
+        print(food_item)
 
         # Get the price of the item
-        cursor.execute(f'SELECT price FROM food_items WHERE item_id = {int(item_id)}')
-        price = cursor.fetchone()
+        item = food_items.find_one({"_id": item_id}, {"price": 1})
+        price = item["price"]
 
         # Calculate the total price
-        total_price = price[0] * quantity 
+        total_price = price * quantity 
 
-        # Insert the order into the orders table
-        cursor.execute(f'INSERT INTO orders (order_id, item_id, quantity, total_price) VALUES ({order_id}, {item_id}, {quantity}, {total_price})')
-
-        # Commit changes
-        conn.commit()
-        cursor.close()
+        # Insert the order into the orders collection
+        orders.insert_one({"order_id": order_id, "item_id": item_id, "quantity": quantity, "total_price": total_price})
 
         return "Order inserted successfully"
-
-    except sqlite3.ProgrammingError as e:
+    except Exception as e:
         print(f"An error occurred: {e}")
-        conn.close()
 
-
-# add food items manually 
-
-# Price in USD
-food_items = [
-    ("Pizza", 10.00),
-    ("Burger", 5.00),
-    ("Fries", 3.00),
-    ("Cola", 2.00),
-    ("Sandwich", 4.00),
-    ("Chicken", 12.00),
-    ("Cake", 6.00)
-]
+# function to get total order price
+def get_order_total(order_id):
+    try :
+        # get all the orers with the given order_id
+        order = orders.find({"order_id": order_id})
+        total_price = 0
+        for item in order:
+            total_price += item["total_price"]
+        return total_price
+    except Exception as e:
+        print(f"An error occurred: {e}")
         
-def insert_food_items():
-    cursor = conn.cursor()
+
+# insert order tracking
+def insert_order_tracking(order_id, status):
     try:
-        # Insert food items into the food_items table
-        cursor.executemany('INSERT INTO food_items (item_name, price) VALUES (?, ?)', food_items)
-
-        # Commit changes
-        conn.commit()
-        cursor.close()
-
-        return "Food items inserted successfully"
-
-    except sqlite3.ProgrammingError as e:
+        # Insert the order tracking status into the order_tracking collection
+        order_tracking.insert_one({"order_id": order_id, "status": status})
+    except Exception as e:
         print(f"An error occurred: {e}")
-        cursor.close()
-
-if __name__ == '__main__':
-    insert_food_items()
-    
-    

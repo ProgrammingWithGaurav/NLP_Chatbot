@@ -31,14 +31,15 @@ async def handle_request(request: Request):
         'order.add - context: ongoing-order': add_to_order,
         'order.complete - context: ongoing-order': complete_order,
         'track.order - context: ongoing-tracking': track_order,
-        # 'order.remove - context: ongoing-order': remove_from_order,
+        'order.menu': show_menu,
+        'order.remove - context: ongoing-order': remove_from_order,
     }
     return intent_handler_dict[intent](parameters, session_id)
 
 # TRACK ORDER
 def track_order(parameter: dict, session_id: str):  
     order_id = parameter['order_id']
-    status = db.get_order_status(order_id)
+    status = db.get_order_status(int(order_id))
     if(status):
         fullfillment_text = f'The status of order {order_id} is {status}'
     else:
@@ -55,8 +56,9 @@ def add_to_order(parameters: dict, session_id: str):
     quantity = parameters['number']
 
     # check if the food item has quantity
-    if len(food_items) != len(quantity):
+    if len(food_items) != len(quantity):    
         fullfillment_text = 'Please provide the quantity for each food item'
+
     else : 
         # food_items = ['pizza', 'burger']
         # quantity = [1, 2]
@@ -67,6 +69,7 @@ def add_to_order(parameters: dict, session_id: str):
             inprogress_orders[session_id].update(new_food_dict) 
         else:
             inprogress_orders[session_id] = new_food_dict
+
         order_str = utils.get_str_from_food_dict(inprogress_orders[session_id])
         fullfillment_text = f'Added {order_str} to your order. Anything else?'
 
@@ -78,7 +81,14 @@ def add_to_order(parameters: dict, session_id: str):
 def complete_order(parameters: dict, session_id: str):
     if session_id in inprogress_orders:
         order = inprogress_orders[session_id]
-        save_to_db(order)
+        order_id = save_to_db(order)
+        if order_id != -1:
+            order_total = db.get_order_total(order_id)
+            fullfillment_text = f'Your order is placed. Your order id is {order_id} and the total is {order_total}'
+            inprogress_orders.pop(session_id)
+
+        else:
+            fullfillment_text = 'An error occurred. Please try again'
     else:
         fullfillment_text = 'Trouble finding your order. Please try again'
 
@@ -92,9 +102,58 @@ def save_to_db(order: dict):
 
     # {'pizza': 1, 'burger': 2}
     for food_item, quantity in order.items():
-        item_id = db.get_item_id(food_item)
-        db.insert_order_item(item_id, quantity, next_order_id)
+        item_id = db.get_food_item_id(food_item)
+        rcode = db.insert_order_item(food_item, quantity, next_order_id)
+        if rcode == -1:
+            return -1
+            
+    # set in-progress order to completed
+    db.insert_order_tracking(next_order_id, 'in progress')
+    return next_order_id
+    
+def show_menu(parameters: dict, session_id: str):
+    # show items with price
+    menu = db.get_menu()
+    menu_str = utils.get_str_from_menu(menu)
+    fullfillment_text = f'Here is the menu: {menu_str}. What would you like to order?'
+    return JSONResponse(
+        content= {
+            'fulfillmentText': fullfillment_text,
+        }
+        
+    )
 
+def remove_from_order(parameters: dict, session_id: str):
+    food_item = parameters['food-item']
+    current_order = inprogress_orders[session_id]
+
+    removed_items = []
+    no_such_items = []
+
+    for item in food_item:
+        if item not in current_order:
+            no_such_items.append(item)
+        else:
+            removed_items.append(item)
+            del current_order[item]
+
+    if len(removed_items) > 0:
+        fulfillmentText =f'Removed {", ".join(removed_items)} from your order'
+    if len(no_such_items) > 0:
+        fulfillmentText =f'Could not find {", ".join(no_such_items)} in your order'
+
+    if len(current_order.keys()) == 0:
+        fulfillmentText += 'Your order is empty. What would you like to order?'
+
+    else :
+        order_str = utils.get_str_from_food_dict(current_order)
+        fulfillmentText += f'Your order now contains {order_str}. Anything else?'
+
+    return JSONResponse(
+        content= {
+            'fulfillmentText': fulfillmentText,
+        }
+    )
 
 @app.get("/")
 async def hello_world(request: Request):
