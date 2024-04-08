@@ -1,3 +1,2 @@
-pysqlite3
 fastapi[all]
 "pymongo[srv]"

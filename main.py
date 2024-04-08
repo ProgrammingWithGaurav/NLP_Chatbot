@@ -33,6 +33,7 @@ async def handle_request(request: Request):
         'track.order - context: ongoing-tracking': track_order,
         'order.menu': show_menu,
         'order.remove - context: ongoing-order': remove_from_order,
+        'order.cancel - context: ongoing-order': cancel_order,
     }
     return intent_handler_dict[intent](parameters, session_id)
 
@@ -152,6 +153,21 @@ def remove_from_order(parameters: dict, session_id: str):
     return JSONResponse(
         content= {
             'fulfillmentText': fulfillmentText,
+        }
+    )
+
+
+# CACNCEL ORDER
+def cancel_order(parameters: dict, session_id: str):
+    if session_id in inprogress_orders:
+        inprogress_orders.pop(session_id)
+        fullfillment_text = 'Your order has been cancelled'
+    else:
+        fullfillment_text = 'Trouble finding your order. Please try again'
+
+    return JSONResponse(
+        content= {
+            'fulfillmentText': fullfillment_text,
         }
     )
 
