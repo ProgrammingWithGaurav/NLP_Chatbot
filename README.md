@@ -17,4 +17,4 @@ This project is about learning to create chatbot using Dialogflow. 🤖
 - Show the items in the cart 📝
 - Cancel the order ❌
 - Show the menu 📜
-- Complete the order ✅
+- Complete the order ✅ by specifying the delivery address 🏠

@@ -115,9 +115,9 @@ def get_order_total(order_id):
         
 
 # insert order tracking
-def insert_order_tracking(order_id, status):
+def  insert_order_tracking(order_id, status, address):
     try:
         # Insert the order tracking status into the order_tracking collection
-        order_tracking.insert_one({"order_id": order_id, "status": status})
+        order_tracking.insert_one({"order_id": order_id, "status": status, "address": address})
     except Exception as e:
         print(f"An error occurred: {e}")

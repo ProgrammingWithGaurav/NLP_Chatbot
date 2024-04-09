@@ -80,16 +80,22 @@ def add_to_order(parameters: dict, session_id: str):
 
 # COMPLETE ORDER
 def complete_order(parameters: dict, session_id: str):
+    address = parameters['address']
     if session_id in inprogress_orders:
         order = inprogress_orders[session_id]
-        order_id = save_to_db(order)
-        if order_id != -1:
-            order_total = db.get_order_total(order_id)
-            fullfillment_text = f'Your order is placed. Your order id is {order_id} and the total is {order_total}'
-            inprogress_orders.pop(session_id)
-
+        if len(order) == 0:
+            fullfillment_text = 'Your order is empty. What would you like to order?'
         else:
-            fullfillment_text = 'An error occurred. Please try again'
+            if address == '':
+                fullfillment_text = 'Please provide an address for delivery'
+            else:
+                order_id = save_to_db(order, address)
+                if order_id != -1:
+                    order_total = db.get_order_total(order_id)
+                    fullfillment_text = f'Your order will be delivered to {address}. Your total is {order_total}, order id is {order_id}'
+                    inprogress_orders.pop(session_id)
+                else:
+                    fullfillment_text = 'An error occurred. Please try again'
     else:
         fullfillment_text = 'Trouble finding your order. Please try again'
 
@@ -97,7 +103,7 @@ def complete_order(parameters: dict, session_id: str):
             'fulfillmentText': fullfillment_text,
         })
 
-def save_to_db(order: dict):
+def save_to_db(order: dict, address: str):
     # get next order id
     next_order_id = db.get_next_order_id()
 
@@ -109,7 +115,7 @@ def save_to_db(order: dict):
             return -1
             
     # set in-progress order to completed
-    db.insert_order_tracking(next_order_id, 'in progress')
+    db.insert_order_tracking(next_order_id, 'in progress', address)
     return next_order_id
     
 def show_menu(parameters: dict, session_id: str):
